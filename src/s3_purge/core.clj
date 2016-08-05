@@ -1,6 +1,6 @@
 (ns s3-purge.core
   (:require [s3-purge.client :refer [client]]
-            [clojure.core.async :as async :refer [go-loop chan <! >! >!! <!! go]])
+            [clojure.core.async :as async :refer [go-loop chan <! >! >!! <!! go close!]])
   (:import  [com.amazonaws.services.s3.model ListObjectsRequest]
             [com.amazonaws.regions Regions]))
 
@@ -30,7 +30,10 @@
     (go-loop []
       (when-some [listing (<! in)]
         (purge-fn listing out)
-        (recur)))
+        (if-not (.isTruncated listing)
+          (do (close! in)
+              (close! out))
+          (recur))))
     [in out]))
 
 (defn print-listing-first
@@ -44,15 +47,19 @@
 (defn printer
   "Writes a line for every received item on the purgers out channel"
   [out]
-  (go (while true (println (<! out)))))
+  (go-loop []
+    (when-some [msg (<! out)]
+      (println msg)
+      (recur))))
 
-(defn run
+(defn -main
   "The main method that kicks everything off"
   [& args]
   (let [s3 (client Regions/US_EAST_1)
-        [in out] (purger handle-listing s3)]
+        [in out] (purger print-listing-first s3)]
     (printer out)
     (loop [listing (list-objects s3 "pp-pfp")]
-      (if listing
-        (>!! in listing))
-      (recur (.listNextBatchOfObjects s3 listing)))))
+      (if-not (.isTruncated listing)
+        (>!! in listing)
+        (do (>!! in listing)
+            (recur (.listNextBatchOfObjects s3 listing)))))))

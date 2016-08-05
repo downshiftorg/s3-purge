@@ -6,4 +6,4 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/core.async "0.2.385"]
                  [com.amazonaws/aws-java-sdk-s3 "1.11.22"]]
-  :main s3-purge.core/run)
+  :main s3-purge.core)
