@@ -1,23 +1,6 @@
 (ns s3-purge.purge
-  (:require [clojure.core.async :refer [go-loop chan <! >!! close!]]
-            [clojure.core.reducers :as r])
+  (:require [clojure.core.reducers :as r])
   (:import  [java.util Date]))
-
-(defn purger
-  "Creates a purger.
-  purge-fn will be executed for every page that is pushed to its in channel
-  purge-fn is given the listing object and the purger's out channel"
-  [purge-fn client]
-  (let [in (chan)
-        out (chan)]
-    (go-loop []
-      (when-some [listing (<! in)]
-        (purge-fn client listing out)
-        (if-not (.isTruncated listing)
-          (do (close! in)
-              (close! out))
-          (recur))))
-    [in out]))
 
 (defn summaries
   "Get the object summaries of the listing"
@@ -81,20 +64,20 @@
         1)))
 
 (defn log-total
-  "Logs total number of old files in the given listing"
-  [client listing out]
+  "Logs total number of old files in a given listing"
+  [clients listing]
   (->> (summaries listing)
        (filter old?)
        (count)
        (str "Total targets: ")
-       (>!! out)))
+       (println)))
 
 (defn delete-old-files
   "Delete all old files"
-  [client listing out]
+  [client listing]
   (->> (summaries listing)
        (filter old?)
        (pmap (partial delete-object client))
        (r/reduce +)
        (str "Deleted files: ")
-       (>!! out)))
+       (println)))
