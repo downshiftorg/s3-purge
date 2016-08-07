@@ -1,5 +1,6 @@
 (ns s3-purge.purge
-  (:require [clojure.core.async :refer [go-loop chan <! >!! close!]])
+  (:require [clojure.core.async :refer [go-loop chan <! >!! close!]]
+            [clojure.core.reducers :as r])
   (:import  [java.util Date]))
 
 (defn purger
@@ -11,7 +12,7 @@
         out (chan)]
     (go-loop []
       (when-some [listing (<! in)]
-        (purge-fn listing out)
+        (purge-fn client listing out)
         (if-not (.isTruncated listing)
           (do (close! in)
               (close! out))
@@ -71,10 +72,29 @@
 ;; Is the summary an old jpeg or an old zip?
 (def old? (some-fn old-jpeg? old-zip?))
 
-(defn print-listing-first
-  "A diagnostic purge function. Prints the first key of the listing"
-  [listing out]
+(defn delete-object
+  "Delete an object and return the number of objects deleted"
+  [client summary]
+  (let [key (.getKey summary)
+        bucket (.getBucketName summary)]
+    (do (.deleteObject client bucket key)
+        1)))
+
+(defn log-total
+  "Logs total number of old files in the given listing"
+  [client listing out]
   (->> (summaries listing)
        (filter old?)
        (count)
+       (str "Total targets: ")
+       (>!! out)))
+
+(defn delete-old-files
+  "Delete all old files"
+  [client listing out]
+  (->> (summaries listing)
+       (filter old?)
+       (pmap (partial delete-object client))
+       (r/reduce +)
+       (str "Deleted files: ")
        (>!! out)))
