@@ -1,6 +1,7 @@
 (ns s3-purge.purge
   (:require [clojure.core.reducers :as r])
-  (:import  [java.util Date]))
+  (:import  [java.util Date]
+            [com.amazonaws.services.s3.model DeleteObjectsRequest]))
 
 (defn summaries
   "Get the object summaries of the listing"
@@ -55,29 +56,42 @@
 ;; Is the summary an old jpeg or an old zip?
 (def old? (some-fn old-jpeg? old-zip?))
 
-(defn delete-object
-  "Delete an object and return the number of objects deleted"
-  [client summary]
-  (let [key (.getKey summary)
-        bucket (.getBucketName summary)]
-    (do (.deleteObject client bucket key)
-        1)))
+(defn -object-key
+  "Simple function for getting an object's key"
+  [summary]
+  (.getKey summary))
 
-(defn log-total
-  "Logs total number of old files in a given listing"
-  [clients listing]
-  (->> (summaries listing)
-       (filter old?)
-       (count)
-       (str "Total targets: ")
-       (println)))
+(defn create-delete-request
+  "Create a DeleteObjectsRequest from a listing and its summaries"
+  [listing summaries]
+  (->> (pmap -object-key summaries)
+       (into-array String)
+       (#(doto
+           (DeleteObjectsRequest. (.getBucketName listing))
+           (.withKeys %)))))
+
+(defn -del-count
+  "Get the number of objects deleted from a given DeleteObjectsResult"
+  [result]
+  (let [objs (.getDeletedObjects result)]
+    (.size objs)))
+
+(defn -do-delete
+  "Perform the delete request and print results"
+  [client request]
+  (try
+    (let [keys (.getKeys request)
+          len (count keys)]
+      (if (> len 0)
+        (let [res (.deleteObjects client request)]
+          (println (str "Deleted " (-del-count res) " object(s)")))))
+    (catch Exception e
+      (println (.getMessage e)))))
 
 (defn delete-old-files
   "Delete all old files"
   [client listing]
   (->> (summaries listing)
        (filter old?)
-       (pmap (partial delete-object client))
-       (r/reduce +)
-       (str "Deleted files: ")
-       (println)))
+       ((partial create-delete-request listing))
+       ((partial -do-delete client))))
