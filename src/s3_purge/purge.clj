@@ -24,7 +24,7 @@
   [summary]
   (is? "zip" summary))
 
-(def ^:const day-in-ms (* 1000 60 24))
+(def ^:const day-in-ms (* 1000 60 60 24))
 
 (defn days-ago
   "Get a date n number of days from the current time"
