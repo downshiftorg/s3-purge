@@ -12,18 +12,27 @@
   "Check if the S3ObjectSummary is of the given file type"
   [ext summary]
   (-> (.getKey summary)
+      (.toLowerCase)
       (.contains (str "." ext))))
 
-(defn jpeg?
+(defn img?
   "Check if the given object summary represents a jpeg"
   [summary]
-  (or (is? "jpg" summary)
-      (is? "jpeg" summary)))
+  (or
+    (is? "jpg" summary)
+    (is? "jpeg" summary)
+    (is? "png" summary)
+    (is? "gif" summary)))
 
 (defn zip?
   "Check if the given object summary represents a zip"
   [summary]
   (is? "zip" summary))
+
+(defn pdf?
+  "Check if the given object represents a pdf"
+  [summary]
+  (is? "pdf" summary))
 
 (def ^:const day-in-ms (* 1000 60 60 24))
 
@@ -39,11 +48,11 @@
   (->> (days-ago days)
        (.before (.getLastModified summary))))
 
-(defn old-jpeg?
+(defn old-img?
   "Does the summary represent an old jpeg?"
   [summary]
   (let [before? (partial before-days? 3)
-        old? (every-pred jpeg? before?)]
+        old? (every-pred img? before?)]
     (old? summary)))
 
 (defn old-zip?
@@ -53,8 +62,15 @@
         old? (every-pred zip? before?)]
     (old? summary)))
 
-;; Is the summary an old jpeg or an old zip?
-(def old? (some-fn old-jpeg? old-zip?))
+(defn old-pdf?
+  "Does the summary represent an old pdf?"
+  [summary]
+  (let [before? (partial before-days? 3)
+        old? (every-pred pdf? before?)]
+    (old? summary)))
+
+;; Is the summary an old jpeg, zip or pdf?
+(def old? (some-fn old-img? old-zip? old-pdf?))
 
 (defn -object-key
   "Simple function for getting an object's key"
